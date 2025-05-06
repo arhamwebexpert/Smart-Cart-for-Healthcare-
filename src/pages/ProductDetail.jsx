@@ -4,31 +4,84 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useScannerStore from '../stores/scannerStore';
 
 const ProductDetail = () => {
-    const { id } = useParams();
+    const { barcode } = useParams(); // Change from id to barcode to match API
     const navigate = useNavigate();
-    const { scannedItems } = useScannerStore();
     const [product, setProduct] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        // Find the product by ID
-        const productItem = scannedItems.find(item => item.id === parseInt(id));
+        const fetchProduct = async () => {
+            try {
+                const response = await fetch(`http://localhost:3000/api/products/${barcode}`);
 
-        if (productItem) {
-            setProduct(productItem);
-        } else {
-            // Product not found, redirect back to dashboard
-            navigate('/dashboard');
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        navigate('/dashboard');
+                        return;
+                    }
+                    throw new Error('Failed to fetch product');
+                }
+
+                const data = await response.json();
+                setProduct(data);
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchProduct();
+    }, [barcode, navigate]);
+
+    const handleDelete = async () => {
+        if (window.confirm('Are you sure you want to delete this product?')) {
+            try {
+                const response = await fetch(`/api/products/${barcode}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    navigate('/dashboard');
+                } else {
+                    throw new Error('Failed to delete product');
+                }
+            } catch (err) {
+                setError(err.message);
+            }
         }
-    }, [id, scannedItems, navigate]);
+    };
 
-    if (!product) {
+    if (loading) {
         return (
-            <div className="min-h-screen bg-blue-50 flex items-center justify-center">
-                <div className="bg-white p-8 rounded-xl shadow-lg">
-                    <p className="text-gray-600">Loading product information...</p>
+            <div className="flex justify-center items-center min-h-screen">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                    <p className="mt-4 text-lg">Loading product information...</p>
                 </div>
             </div>
         );
+    }
+
+    if (error) {
+        return (
+            <div className="container mx-auto p-4">
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                    <p>Error: {error}</p>
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="mt-2 bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded"
+                    >
+                        Back to Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!product) {
+        return null;
     }
 
     return (

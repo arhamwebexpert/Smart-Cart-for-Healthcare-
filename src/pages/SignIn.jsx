@@ -3,12 +3,15 @@ import { Link } from 'react-router-dom';
 
 const SignIn = ({ onLogin }) => {
     const [formData, setFormData] = useState({
+        name: '',
         email: '',
-        password: ''
+        password: '',
+        confirmPassword: ''
     });
 
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
+    const [serverError, setServerError] = useState('');
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -17,10 +20,14 @@ const SignIn = ({ onLogin }) => {
         if (errors[name]) {
             setErrors({ ...errors, [name]: '' });
         }
+        if (serverError) {
+            setServerError('');
+        }
     };
 
     const validateForm = () => {
         const newErrors = {};
+        if (!formData.name) newErrors.name = 'Name is required';
         if (!formData.email) {
             newErrors.email = 'Email is required';
         } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
@@ -28,6 +35,11 @@ const SignIn = ({ onLogin }) => {
         }
         if (!formData.password) {
             newErrors.password = 'Password is required';
+        } else if (formData.password.length < 8) {
+            newErrors.password = 'Password must be at least 8 characters';
+        }
+        if (formData.password !== formData.confirmPassword) {
+            newErrors.confirmPassword = 'Passwords do not match';
         }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -37,19 +49,43 @@ const SignIn = ({ onLogin }) => {
         e.preventDefault();
         if (validateForm()) {
             setIsLoading(true);
-            setTimeout(() => {
-                const userData = {
-                    id: '123456',
-                    name: 'Test User',
-                    email: formData.email,
-                };
-                const mockToken = 'mock-jwt-token';
-                onLogin(userData, mockToken);
+
+            try {
+                // In a real application, you would connect this to your backend API
+                // Since there's no authentication endpoints in the provided API,
+                // we'll keep the mock registration for demonstration purposes
+
+                // For a real implementation, you would do something like:
+                // const response = await fetch('/api/auth/register', {
+                //   method: 'POST',
+                //   headers: { 'Content-Type': 'application/json' },
+                //   body: JSON.stringify({
+                //     name: formData.name,
+                //     email: formData.email,
+                //     password: formData.password
+                //   })
+                // });
+                // if (!response.ok) throw new Error('Registration failed');
+                // const data = await response.json();
+                // onLogin(data.user, data.token);
+
+                // Mock implementation for demonstration:
+                setTimeout(() => {
+                    const userData = {
+                        id: '123456',
+                        name: formData.name,
+                        email: formData.email,
+                    };
+                    const mockToken = 'mock-jwt-token';
+                    onLogin(userData, mockToken);
+                    setIsLoading(false);
+                }, 1000);
+            } catch (error) {
+                setServerError('Failed to sign up. Please try again.');
                 setIsLoading(false);
-            }, 1000);
+            }
         }
     };
-
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-gray-800 to-black px-4">
             <div className="bg-white shadow-lg rounded-2xl p-8 w-full max-w-md">

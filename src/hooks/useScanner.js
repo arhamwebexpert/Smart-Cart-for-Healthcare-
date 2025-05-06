@@ -4,10 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 // Define the sample barcodes that match the product database
 const sampleBarcodes = [
   "8901234567890", // Organic Greek Yogurt
-  "5901234567891", // Whole Grain Bread
-  "7801234567892", // Almond Butter
-  "4401234567893", // Atlantic Salmon Fillet
-  "9301234567894", // Quinoa
 ];
 
 const useScanner = () => {

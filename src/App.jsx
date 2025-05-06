@@ -73,7 +73,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/Analysis" element={<AnalysisALL />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="product/:id" element={<ProductDetail />} />
+          <Route path="product/:barcode" element={<ProductDetail />} />
           <Route path="analysis/:folderId" element={<Analysis />} />
         </Route>
 

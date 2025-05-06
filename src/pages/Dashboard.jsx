@@ -10,58 +10,6 @@ import EmptyState from '../components/ui/EmptyState';
 import Modal from '../components/ui/Modal';
 
 // Sample product database - in a real app, this would come from an API
-const productDatabase = {
-    '8901234567890': {
-        name: 'Organic Greek Yogurt',
-        brand: 'Nature Valley',
-        calories: 120,
-        protein: '15g',
-        carbs: '9g',
-        fats: '2g',
-        quantity: '170g',
-        image: '/api/placeholder/80/80'
-    },
-    '5901234567891': {
-        name: 'Whole Grain Bread',
-        brand: 'Harvest Baker',
-        calories: 80,
-        protein: '4g',
-        carbs: '15g',
-        fats: '1g',
-        quantity: '1 slice (30g)',
-        image: '/api/placeholder/80/80'
-    },
-    '7801234567892': {
-        name: 'Almond Butter',
-        brand: 'Nutty Goodness',
-        calories: 190,
-        protein: '7g',
-        carbs: '6g',
-        fats: '16g',
-        quantity: '2 tbsp (32g)',
-        image: '/api/placeholder/80/80'
-    },
-    '4401234567893': {
-        name: 'Atlantic Salmon Fillet',
-        brand: 'Ocean Fresh',
-        calories: 220,
-        protein: '22g',
-        carbs: '0g',
-        fats: '12g',
-        quantity: '100g',
-        image: '/api/placeholder/80/80'
-    },
-    '9301234567894': {
-        name: 'Quinoa',
-        brand: 'Wholesome Pantry',
-        calories: 170,
-        protein: '6g',
-        carbs: '32g',
-        fats: '2.5g',
-        quantity: '45g (dry)',
-        image: '/api/placeholder/80/80'
-    }
-};
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -71,6 +19,7 @@ const Dashboard = () => {
         addScannedItem,
         currentBarcode,
         setCurrentBarcode,
+        fetchScannedItems,
         clearItems
     } = useScannerStore();
 
@@ -78,6 +27,7 @@ const Dashboard = () => {
         folders,
         activeFolder,
         createFolder,
+        fetchFolders,
         setActiveFolder
     } = useFolderStore();
 
@@ -85,29 +35,98 @@ const Dashboard = () => {
     const [showFolderModal, setShowFolderModal] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
     const [showStartScanningPrompt, setShowStartScanningPrompt] = useState(true);
+    const [isLoadingProduct, setIsLoadingProduct] = useState(false);
 
     // Check if user has any folders, if not, show folder creation prompt
     useEffect(() => {
+        // Initial data fetch
+        const initializeData = async () => {
+            try {
+                await fetchFolders();
+            } catch (error) {
+                setAlertMessage({
+                    type: 'error',
+                    message: 'Failed to load carts. Please try again later.'
+                });
+            }
+        };
+        initializeData();
+    }, [fetchFolders]); // Empty dependency array ensures this runs only once on mount
+
+    useEffect(() => {
+        // Handle folder state after initial load/updates
         if (folders.length === 0) {
-            setShowStartScanningPrompt(false);
             setShowFolderModal(true);
-        } else if (!activeFolder && folders.length > 0) {
+            setShowStartScanningPrompt(false);
+        } else if (!activeFolder) {
+            // Auto-select first folder if none selected
             setActiveFolder(folders[0].id);
         }
     }, [folders, activeFolder, setActiveFolder]);
 
-    const handleCreateFolder = () => {
+    useEffect(() => {
+        // Fetch items when active folder changes
+        const loadItems = async () => {
+            if (activeFolder) {
+                try {
+                    await fetchScannedItems(activeFolder);
+                    setShowStartScanningPrompt(true);
+                } catch (error) {
+                    setAlertMessage({
+                        type: 'error',
+                        message: 'Failed to load cart items. Please try again.'
+                    });
+                }
+            }
+        };
+        loadItems();
+    }, [activeFolder, fetchScannedItems]);
+
+    useEffect(() => {
+        // Handle scanner errors
+        if (error) {
+            setAlertMessage({ type: 'error', message: error });
+        }
+    }, [error]);
+
+    const handleCreateFolder = async () => {
         if (newFolderName.trim()) {
-            const newFolder = createFolder(newFolderName);
-            setActiveFolder(newFolder.id);
-            setNewFolderName('');
-            setShowFolderModal(false);
-            setShowStartScanningPrompt(true);
-            setAlertMessage({
-                type: 'success',
-                message: `Folder "${newFolderName}" created successfully!`
-            });
-            setTimeout(() => setAlertMessage(null), 3000);
+            try {
+                const newFolder = await createFolder(newFolderName);
+                setActiveFolder(newFolder.id);
+                setNewFolderName('');
+                setShowFolderModal(false);
+                setShowStartScanningPrompt(true);
+                setAlertMessage({
+                    type: 'success',
+                    message: `Cart "${newFolderName}" created successfully!`
+                });
+                setTimeout(() => setAlertMessage(null), 3000);
+            } catch (error) {
+                setAlertMessage({
+                    type: 'error',
+                    message: 'Failed to create cart. Please try again.'
+                });
+            }
+        }
+    };
+
+    const fetchProductByBarcode = async (barcode) => {
+        setIsLoadingProduct(true);
+        try {
+            const response = await fetch(`http://localhost:3000/api/products/${barcode}`);
+            if (response.ok) {
+                return await response.json();
+            } else if (response.status === 404) {
+                return null;
+            } else {
+                throw new Error('Failed to fetch product data');
+            }
+        } catch (err) {
+            console.error('Error fetching product:', err);
+            throw err;
+        } finally {
+            setIsLoadingProduct(false);
         }
     };
 
@@ -115,7 +134,7 @@ const Dashboard = () => {
         if (!activeFolder) {
             setAlertMessage({
                 type: 'warning',
-                message: 'Please create or select a folder first'
+                message: 'Please create or select a cart first'
             });
             setShowFolderModal(true);
             return;
@@ -125,16 +144,39 @@ const Dashboard = () => {
             const barcode = await scan();
             setCurrentBarcode(barcode);
 
-            // Get product info from our database
-            const productInfo = productDatabase[barcode] || {
-                name: 'Unknown Product',
-                brand: 'Unknown',
-                calories: 0,
-                protein: '0g',
-                carbs: '0g',
-                fats: '0g',
-                quantity: 'Unknown'
-            };
+            let productInfo;
+            try {
+                // Fetch product info from our API
+                productInfo = await fetchProductByBarcode(barcode);
+
+                if (!productInfo) {
+                    // Product not in database
+                    productInfo = {
+                        barcode,
+                        name: 'Unknown Product',
+                        brand: 'Unknown',
+                        calories: 0,
+                        protein: '0g',
+                        carbs: '0g',
+                        fats: '0g',
+                        quantity: 'Unknown',
+                        image: '/api/placeholder/80/80'
+                    };
+                }
+            } catch (err) {
+                console.error('Error fetching product data:', err);
+                productInfo = {
+                    barcode,
+                    name: 'Unknown Product',
+                    brand: 'Unknown',
+                    calories: 0,
+                    protein: '0g',
+                    carbs: '0g',
+                    fats: '0g',
+                    quantity: 'Unknown',
+                    image: '/api/placeholder/80/80'
+                };
+            }
 
             const newItem = {
                 id: Date.now(),
@@ -144,7 +186,7 @@ const Dashboard = () => {
                 ...productInfo
             };
 
-            addScannedItem(newItem);
+            await addScannedItem(newItem);
             setShowStartScanningPrompt(false);
             setAlertMessage({
                 type: 'success',
@@ -154,13 +196,14 @@ const Dashboard = () => {
         } catch (err) {
             setAlertMessage({
                 type: 'error',
-                message: error || 'Failed to scan item'
+                message: err.message || 'Failed to scan item'
             });
         }
     };
 
     const handleItemClick = (item) => {
-        navigate(`/product/${item.id}`);
+        console.log(item.barcode);
+        navigate(`/product/${item.barcode}`);
     };
 
     const activeItems = scannedItems.filter(item =>
@@ -191,7 +234,6 @@ const Dashboard = () => {
     useEffect(() => {
         if (error) setAlertMessage({ type: 'error', message: error });
     }, [error]);
-
     return (
         <div className="min-h-screen bg-blue-100 py-10 px-4">
             <div className="max-w-5xl mx-auto">
