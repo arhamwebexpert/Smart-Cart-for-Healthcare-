@@ -9,6 +9,7 @@ const useScannerStore = create((set, get) => ({
 
   // Fetch items for active folder
   fetchScannedItems: async (folderId) => {
+    console.log("Fetching items for folder:", folderId);
     try {
       const response = await fetch(
         `http://localhost:3000/api/folders/${folderId}/items`
@@ -25,6 +26,11 @@ const useScannerStore = create((set, get) => ({
   // Create a scanned item on the server, then add to store
   addScannedItem: async (folderId, { id, barcode }) => {
     try {
+      // Validate inputs
+      if (!id || !barcode) {
+        throw new Error("ID and barcode are required");
+      }
+
       const response = await fetch(
         `http://localhost:3000/api/folders/${folderId}/items`,
         {
@@ -33,15 +39,20 @@ const useScannerStore = create((set, get) => ({
           body: JSON.stringify({ id, barcode }),
         }
       );
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Failed to save scanned item");
       }
+
       const newItem = await response.json();
+
       // prepend to the list
       set((state) => ({
         scannedItems: [newItem, ...state.scannedItems],
+        currentBarcode: null, // Reset barcode after successful scan
       }));
+
       return newItem;
     } catch (error) {
       console.error("Error creating scanned item:", error);

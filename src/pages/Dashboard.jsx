@@ -1,4 +1,3 @@
-// src/pages/Dashboard.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useScanner from '../hooks/useScanner';
@@ -179,14 +178,14 @@ const Dashboard = () => {
             }
 
             const newItem = {
-                id: Date.now(),
+                id: String(Date.now()),
                 barcode,
                 folderId: activeFolder,
                 timestamp: new Date().toLocaleTimeString(),
                 ...productInfo
             };
 
-            await addScannedItem(newItem);
+            await addScannedItem(activeFolder, { id: String(newItem.id), barcode: newItem.barcode });
             setShowStartScanningPrompt(false);
             setAlertMessage({
                 type: 'success',
