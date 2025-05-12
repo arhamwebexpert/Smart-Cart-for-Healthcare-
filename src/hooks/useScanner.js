@@ -1,96 +1,78 @@
-// src/hooks/useScanner.js
-import { useState, useEffect, useCallback } from "react";
+// hooks/useScanner.js
+import { useState } from "react";
+import useScannerStore from "../stores/scannerStore";
 
-// Define the sample barcodes that match the product database
-const sampleBarcodes = [
-  "8901234567890", // Organic Greek Yogurt
-];
-
-const useScanner = () => {
-  const [status, setStatus] = useState("disconnected"); // 'disconnected', 'connecting', 'connected'
+function useScanner() {
+  const [status, setStatus] = useState("disconnected");
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
+  const setCurrentBarcode = useScannerStore((s) => s.setCurrentBarcode);
 
-  // Connect to scanner
-  const connect = useCallback(() => {
+  // Simulate or implement your real hardware connect logic
+  async function connect() {
     setStatus("connecting");
-    setError(null);
-
-    // In a real app, this would connect to a real scanner via WebUSB, Bluetooth, or other means
-    // For this example, we'll simulate a connection
-    const timeout = setTimeout(() => {
+    try {
+      // await device.open();
       setStatus("connected");
-    }, 1500);
+    } catch (err) {
+      setStatus("disconnected");
+      setError("Failed to connect scanner");
+    }
+  }
 
-    return () => clearTimeout(timeout);
-  }, []);
-
-  // Disconnect from scanner
-  const disconnect = useCallback(() => {
-    setStatus("disconnected");
-  }, []);
-
-  // Scan an item
-  const scan = useCallback(() => {
+  // Kick off a hardware scan + validate via your GET /api/scan route
+  async function scan() {
     if (status !== "connected") {
       setError("Scanner not connected");
-      return Promise.reject(new Error("Scanner not connected"));
+      return;
     }
 
-    setScanning(true);
     setError(null);
+    setScanning(true);
 
-    // In a real app, this would trigger an actual scan
-    // For this example, we'll simulate scanning
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        try {
-          // Randomly select one of our sample barcodes (80% chance)
-          // or generate a random one (20% chance)
-          let barcode;
-          if (Math.random() < 0.8) {
-            // Use one of our predefined barcodes
-            const randomIndex = Math.floor(
-              Math.random() * sampleBarcodes.length
-            );
-            barcode = sampleBarcodes[randomIndex];
-          } else {
-            // Generate random barcode
-            barcode = Math.floor(
-              100000000000 + Math.random() * 900000000000
-            ).toString();
-          }
+    try {
+      // 1. Get the raw code from your scanner hardware:
+      const rawCode = await fakeHardwareScan();
+      console.log(rawCode);
+      //    replace fakeHardwareScan() with your actual API
 
-          setScanning(false);
-          resolve(barcode);
-        } catch (err) {
-          setScanning(false);
-          setError("Failed to scan item");
-          reject(err);
-        }
-      }, 800);
-    });
-  }, [status]);
+      // 2. Validate it against your backend:
+      const res = await fetch(
+        `http://192.168.18.173:3000/api/scan/${encodeURIComponent(rawCode)}`
+      );
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || `Scan failed (${res.status})`);
+      }
 
-  // Auto-connect on mount
-  useEffect(() => {
-    const cleanup = connect();
+      const { product } = await res.json();
 
-    // Disconnect on unmount
-    return () => {
-      cleanup();
-      disconnect();
-    };
-  }, [connect, disconnect]);
+      // 3. Only push into state if backend says it’s valid
+      setCurrentBarcode(product.barcode);
+    } catch (err) {
+      console.error("Scan error:", err);
+      setError(err.message);
+    } finally {
+      setScanning(false);
+    }
+  }
 
-  return {
-    status,
-    scanning,
-    error,
-    connect,
-    disconnect,
-    scan,
-  };
-};
+  return { status, scanning, error, connect, scan };
+}
+async function fakeHardwareScan() {
+  try {
+    const response = await fetch(
+      "http://192.168.18.173:3000/api/sendscannedbarcode"
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.barcode;
+  } catch (error) {
+    console.error("Error fetching barcode:", error);
+    return null;
+  }
+}
 
 export default useScanner;

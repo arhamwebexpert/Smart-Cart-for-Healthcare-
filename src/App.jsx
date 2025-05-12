@@ -37,8 +37,8 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('userData');
+    // localStorage.removeItem('authToken');
+    // localStorage.removeItem('userData');
     logout();
   };
 

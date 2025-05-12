@@ -7,9 +7,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import AlertMessage from '../components/ui/AlertMessage';
 import EmptyState from '../components/ui/EmptyState';
 import Modal from '../components/ui/Modal';
-
-// Sample product database - in a real app, this would come from an API
-
+import { fakeHardwareScan } from '../hooks/scannerUtils';
 const Dashboard = () => {
     const navigate = useNavigate();
     const { status, scanning, error, connect, scan } = useScanner();
@@ -80,6 +78,32 @@ const Dashboard = () => {
         };
         loadItems();
     }, [activeFolder, fetchScannedItems]);
+    useEffect(() => {
+        // Open an EventSource to your SSE endpoint
+        const es = new EventSource('http://192.168.18.173:3000/api/scan-stream');
+
+        // On each message (i.e. new barcode), reload the page
+        es.onmessage = (e) => {
+            try {
+                const { barcode } = JSON.parse(e.data);
+                console.log('New scan received via SSE:', barcode);
+                window.location.reload();
+            } catch (err) {
+                console.error('Error parsing SSE data:', err);
+            }
+        };
+
+        // Log errors and close on failure
+        es.onerror = (err) => {
+            console.error('SSE connection error:', err);
+            es.close();
+        };
+
+        // Cleanup on unmount
+        return () => {
+            es.close();
+        };
+    }, []); // empty deps → run once on mount
 
     useEffect(() => {
         // Handle scanner errors
@@ -87,6 +111,51 @@ const Dashboard = () => {
             setAlertMessage({ type: 'error', message: error });
         }
     }, [error]);
+
+    // Listen for API scan events - handle the "8901234567890" barcode
+    useEffect(() => {
+        const handleApiScan = async () => {
+            if (!activeFolder) return;
+            const scannedCode = await fakeHardwareScan();
+            if (scannedCode == null) {
+                console.log("please scan");
+                return;
+            }
+
+            console.log(scannedCode);
+            try {
+                // 1. GET the product by barcode
+                const res = await fetch(`http://192.168.18.173:3000/api/scan/${scannedCode}`);
+                if (!res.ok) throw new Error("Scan failed");
+
+                const { product } = await res.json();
+
+                // 2. Build a unique ID (e.g. timestamp or UUID)
+                const id = String(Date.now());
+
+                // 3. Persist into the active folder
+                await addScannedItem(activeFolder, { id, barcode: product.barcode });
+
+
+                setAlertMessage({
+                    type: "success",
+                    message: `${product.name} added to your cart!`,
+                });
+                setTimeout(() => setAlertMessage(null), 3000);
+
+            } catch (err) {
+                console.error(err);
+                setAlertMessage({ type: "error", message: err.message });
+            }
+        };
+
+
+        // This would typically be connected to a webhook or server event
+        // For this example, we'll just call it once on component mount
+        if (activeFolder) {
+            handleApiScan();
+        }
+    }, [activeFolder, addScannedItem, setCurrentBarcode]);
 
     const handleCreateFolder = async () => {
         if (newFolderName.trim()) {
@@ -107,96 +176,6 @@ const Dashboard = () => {
                     message: 'Failed to create cart. Please try again.'
                 });
             }
-        }
-    };
-
-    const fetchProductByBarcode = async (barcode) => {
-        setIsLoadingProduct(true);
-        try {
-            const response = await fetch(`http://localhost:3000/api/products/${barcode}`);
-            if (response.ok) {
-                return await response.json();
-            } else if (response.status === 404) {
-                return null;
-            } else {
-                throw new Error('Failed to fetch product data');
-            }
-        } catch (err) {
-            console.error('Error fetching product:', err);
-            throw err;
-        } finally {
-            setIsLoadingProduct(false);
-        }
-    };
-
-    const handleScan = async () => {
-        if (!activeFolder) {
-            setAlertMessage({
-                type: 'warning',
-                message: 'Please create or select a cart first'
-            });
-            setShowFolderModal(true);
-            return;
-        }
-
-        try {
-            const barcode = await scan();
-            setCurrentBarcode(barcode);
-
-            let productInfo;
-            try {
-                // Fetch product info from our API
-                productInfo = await fetchProductByBarcode(barcode);
-
-                if (!productInfo) {
-                    // Product not in database
-                    productInfo = {
-                        barcode,
-                        name: 'Unknown Product',
-                        brand: 'Unknown',
-                        calories: 0,
-                        protein: '0g',
-                        carbs: '0g',
-                        fats: '0g',
-                        quantity: 'Unknown',
-                        image: '/api/placeholder/80/80'
-                    };
-                }
-            } catch (err) {
-                console.error('Error fetching product data:', err);
-                productInfo = {
-                    barcode,
-                    name: 'Unknown Product',
-                    brand: 'Unknown',
-                    calories: 0,
-                    protein: '0g',
-                    carbs: '0g',
-                    fats: '0g',
-                    quantity: 'Unknown',
-                    image: '/api/placeholder/80/80'
-                };
-            }
-
-            const newItem = {
-                id: String(Date.now()),
-                barcode,
-                folderId: activeFolder,
-                timestamp: new Date().toLocaleTimeString(),
-                ...productInfo
-            };
-
-            await addScannedItem(activeFolder, { id: String(newItem.id), barcode: newItem.barcode });
-            setShowStartScanningPrompt(false);
-            setAlertMessage({
-                type: 'success',
-                message: `${productInfo.name} scanned successfully!`
-            });
-            setTimeout(() => setAlertMessage(null), 3000);
-        } catch (err) {
-            setAlertMessage({
-                type: 'error',
-                message: err.message || 'Failed to scan item'
-            });
         }
     };
 
@@ -233,6 +212,7 @@ const Dashboard = () => {
     useEffect(() => {
         if (error) setAlertMessage({ type: 'error', message: error });
     }, [error]);
+
     return (
         <div className="min-h-screen bg-blue-100 py-10 px-4">
             <div className="max-w-5xl mx-auto">
@@ -299,34 +279,14 @@ const Dashboard = () => {
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">Ready to Scan</h2>
                         <p className="text-gray-600 mb-6">
                             You're now working in the "{activeFolderName}" Cart.
-                            Start scanning items to add them to this collection.
+                            Items will be automatically added to this collection when scanned.
                         </p>
-                        <button
-                            onClick={handleScan}
-                            disabled={status !== 'connected' || scanning}
-                            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow transition flex items-center justify-center mx-auto"
-                        >
-                            {scanning ? (
-                                <>
-                                    <LoadingSpinner size="small" className="mr-2 text-white" />
-                                    Scanning...
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                    Start Scanning
-                                </>
-                            )}
-                        </button>
                     </div>
                 )}
 
                 {/* Dashboard Cards */}
                 {(!showStartScanningPrompt || activeItems.length > 0) && (
-                    <div className="grid gap-6 mb-8 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-6 mb-8 sm:grid-cols-2 lg:grid-cols-2">
                         {/* Scanner Status */}
                         <div className="bg-white rounded-xl shadow hover:shadow-lg p-6 flex flex-col justify-between transition-shadow">
                             <h2 className="text-xl font-semibold text-gray-700 mb-4">Scanner Status</h2>
@@ -377,33 +337,6 @@ const Dashboard = () => {
                                 </div>
                             </div>
                         )}
-
-                        {/* Scan Button */}
-                        <div className="bg-white rounded-xl shadow hover:shadow-lg p-6 flex items-center justify-center transition-shadow">
-                            <button
-                                onClick={handleScan}
-                                disabled={status !== 'connected' || scanning || !activeFolder}
-                                className={`flex items-center justify-center px-6 py-3 rounded-md font-medium transition ${status !== 'connected' || !activeFolder
-                                    ? 'bg-gray-400 cursor-not-allowed text-white'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                                    }`}
-                            >
-                                {scanning ? (
-                                    <>
-                                        <LoadingSpinner size="small" className="mr-2 text-white" />
-                                        Scanning...
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                        Scan Item
-                                    </>
-                                )}
-                            </button>
-                        </div>
                     </div>
                 )}
 
@@ -423,16 +356,8 @@ const Dashboard = () => {
                                     </svg>
                                 }
                                 title="No items in this Cart"
-                                description="Click the Scan Item button to begin scanning"
-                                action={
-                                    <button
-                                        onClick={handleScan}
-                                        disabled={status !== 'connected' || scanning}
-                                        className="mt-4 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition"
-                                    >
-                                        {scanning ? 'Scanning...' : 'Scan First Item'}
-                                    </button>
-                                }
+                                description="Items will appear here once they are scanned"
+                                action={null}
                             />
                         ) : (
                             <div className="divide-y">
