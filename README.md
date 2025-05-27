@@ -11,6 +11,11 @@ This is the frontend application for the Smart Cart for Healthcare project. Buil
 - State management with Zustand
 - Client-side routing with React Router
 
+## 🔗 Backend Repository
+
+The backend code for this project can be found at:
+[SmartCartForHealthCare Backend](https://github.com/arhamwebexpert/SmartCartForHealthCare-Backend-.git)
+
 ## 📋 Prerequisites
 
 Before you begin, ensure you have the following installed:
@@ -94,12 +99,6 @@ Smart-Cart-for-Healthcare-/
 - Intuitive navigation
 - Loading states and error handling
 
-## 🔐 Security
-
-- Environment variable management
-- Secure API communication
-- WebSocket connection security
-- Input validation and sanitization
 
 ## 🧪 Testing
 
@@ -123,7 +122,6 @@ This project is licensed under the ISC License.
 ## 👥 Authors
 
 - Arham Mehmood
-
 ## 🙏 Acknowledgments
 
 - Thanks to all contributors who have helped shape this project
