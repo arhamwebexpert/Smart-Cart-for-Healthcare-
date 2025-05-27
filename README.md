@@ -122,7 +122,7 @@ This project is licensed under the ISC License.
 
 ## 👥 Authors
 
-- Your Name - Initial work
+- Arham Mehmood
 
 ## 🙏 Acknowledgments
 
